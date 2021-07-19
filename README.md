@@ -7,3 +7,5 @@ Main features:
 - visualize the ARPES image from the selected point in spatial map,
 - select the region of interest in real (E vs. angle) and momentum (E vs. k) space and integrate the spatial map inside this region,
 - save images (cvg, jpg etc.) and data (ARPES or spatial) in 'csv' format. 
+
+![ARPES_GUI](https://user-images.githubusercontent.com/81705695/126094452-12a956d2-0092-45cc-85df-668e0079cfa3.png)
