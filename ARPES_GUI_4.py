@@ -3,24 +3,23 @@ import h5py
 import numpy as np
 from decimal import *
 from scipy import interpolate
+import os
 
 import pyqtgraph as pg
-from PyQt5 import QtCore, uic, QtGui
+from PyQt5 import QtCore, uic, QtGui, QtWidgets
 from PyQt5.QtWidgets import (
     QMainWindow,
     QApplication,
-    QLabel,
-    QErrorMessage,
-    QMessageBox,
     QFileDialog,
     QSlider,
-    QHBoxLayout,
-    QLCDNumber,
+    QMessageBox,
     )
 
 from PyQt5.QtCore import (QDir)
-from main4 import Ui_MainWindow
 
+# pyinstaller --noconsole --onedir --exclude matplotlib --exclude IPython --exclude jedi --exclude notebook .\ARPES_GUI_4.py
+
+from main4 import Ui_MainWindow
 # This code is used if main4.ui file is converted to main4.py file 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -32,19 +31,32 @@ class MainWindow(QMainWindow):
         self.check_box_k()
         self.init_graph_spatial()
         self.init_graph_ARPES()
-
+        self.init_integrate_updates()
+        # Restoring old position if available
+        self.settings = QtCore.QSettings("ARPESsimist", "MainWin")
+        if not self.settings.value("geometry") == None:
+            self.restoreGeometry(self.settings.value("geometry"))
+        else:
+            self.resize(1080, 720)
+        if not self.settings.value("windowState") == None:
+            self.restoreState(self.settings.value("windowState"))
+        self.init_default_variables()
+        
 # This code is used if main4.ui file is NOT converted to main4.py file 
 # (by the comand #pyuic5 main4.ui > main4.py):
 #     
-# class MainApp(QMainWindow):
-#    def __init__(self):
-#        QMainWindow.__init__(self)
-#        self.UI = uic.loadUi('main4.ui', self)
-#        self.init_buttons()
-#        self.check_box_angle()
-#        self.check_box_k()
-#        self.init_graph_spatial()
-#        self.init_graph_ARPES()
+# class MainWindow(QMainWindow):
+#     def __init__(self):
+#         QMainWindow.__init__(self)
+#         self.UI = uic.loadUi(r'C:\Users\Boris\pyproj\ARPES_GUI\main4.ui', self)
+#         self.init_buttons()
+#         self.check_box_angle()
+#         self.check_box_k()
+#         self.init_graph_spatial()
+#         self.init_graph_ARPES()
+    
+    def init_default_variables(self):
+        self.int_rect = False
 
     def check_box_angle(self):
         ''' Connect check box 'Set zero' to the set_zero function (chosing the zero angle)
@@ -122,14 +134,40 @@ class MainWindow(QMainWindow):
             self.plotSpatial.removeItem(self.vLine)
             self.plotSpatial.removeItem(self.hLine)
             self.plotARPES.removeItem(self.roi)
+            self.UI.IntegrateCheckBox.setChecked(True)
+            self.UI.IntegrateCheckBox.setChecked(False)
+            self.UI.LockAutoRangeBox.setChecked(False)
+            #self.int_rect.hide()
+            self.plotSpatial.removeItem(self.int_rect)
         except:
             pass
-       
+
+        # Make sure LastDir exists        
+        if not self.settings.value("LastDir") == None:
+            LastDir = self.settings.value("LastDir")
+        else:
+            LastDir = "."
+
         # Suggest only NXS files for opening
-        file = QFileDialog.getOpenFileName(self, "Open NXS File", "*.nxs")
+        file = QFileDialog.getOpenFileName(self, "Open NXS File", directory=LastDir, filter="*.nxs")
+        QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         self.path = file[0]
-        self.f = h5py.File(self.path, "r")
-        self.ARPES_data = np.array(self.f['salsaentry_1/scan_data/data_12'])
+        try:
+            self.f = h5py.File(self.path, "r")
+        except:
+            QApplication.restoreOverrideCursor()
+            print("No file chosen or could not load data")
+            return
+
+        self.ARPES_data = np.array(self.f['salsaentry_1/scan_data/data_12'])[:, ::-1]
+        filename = os.path.basename(self.path)
+        self.setWindowTitle(f"Filename: {filename}")
+        # Set current directory and save it
+        try:
+            LastDir = os.path.dirname(self.path)
+            self.settings.setValue("LastDir", LastDir)
+        except ValueError:
+            pass
         
         # Determine the integrated image and show it in the left window  
         self.integrated_image = np.rot90(np.sum(self.ARPES_data, axis=(2,3)))
@@ -138,6 +176,8 @@ class MainWindow(QMainWindow):
         # Determine data parameters (X, Y, energy, angle scales, offsets), show ARPES image from the middle position (X/Y), add lines and ROI, set real scales
         # param (0) is the real zero angle, which initially = 0
         self.determine_data_parameters(0)
+        QApplication.restoreOverrideCursor()
+
 
     def update_spatial_image(self, image):
         self.imgSpatial.setImage(image)
@@ -187,9 +227,9 @@ class MainWindow(QMainWindow):
         # set real scales to the spatial image:
         rect = self.scale_img(self.X_scale, self.Y_scale)
         self.imgSpatial.setRect(rect)   
-        
+        self.xcenter_image, self.ycenter_image = self.X_scale[int(self.X_scale.shape[0]/2)], self.Y_scale[int(self.Y_scale.shape[0]/2)]
         # add horizontal and vertical lines in the middle of the spatial image
-        self.add_lines(self.X_scale[int(self.X_scale.shape[0]/2)], self.Y_scale[int(self.Y_scale.shape[0]/2)])
+        self.add_lines(self.xcenter_image, self.ycenter_image)
         
         # show the ARPES image from the X/Y point
         self.update_ARPES_image()
@@ -209,7 +249,11 @@ class MainWindow(QMainWindow):
         ''' Update ARPES image when the lines are moved, and puts actual coordinates in the title, 
             self.ARPES_image - is the ARPES image data determined from the data file (self.ARPES_data)
         '''
-        self.imgARPES.setImage(self.ARPES_image())
+        if self.UI.LockAutoRangeBox.isChecked():
+            autolevels=False
+        else:
+            autolevels=True
+        self.imgARPES.setImage(self.ARPES_image(), autoLevels=autolevels)
         self.plotSpatial.setTitle(f'X: {self.X_coord:.1f}, Y: {self.Y_coord:.1f}')
 
     def ARPES_image(self):
@@ -219,13 +263,28 @@ class MainWindow(QMainWindow):
         self.X_coord = self.find_position(self.X_scale, self.vLine.getPos()[0]) 
         self.Y_coord = self.find_position(self.Y_scale, self.hLine.getPos()[1]) 
         X_index = self.X_scale.shape[0] - 1 - np.where(self.X_scale == self.X_coord)[0][0]
-        Y_index = np.where(self.Y_scale == self.Y_coord)[0][0] 
+        Y_index = np.where(self.Y_scale == self.Y_coord)[0][0]
+
+        # Check integration boundaries
+        xintval = self.UI.XSpinBox.value() 
+        yintval = self.UI.YSpinBox.value() 
         
-        # if check box 'k-scale' is selected, convert angles to k
+        # if check-box 'Integrate' is selected, make a sum over the selected area
+        if self.UI.IntegrateCheckBox.isChecked():
+            multiple_ims = self.ARPES_data[Y_index-yintval:Y_index+yintval, X_index-xintval:X_index+xintval, :, :]
+            tout = np.sum(multiple_ims, axis=0)
+            tout = np.sum(tout, axis=0)
+        else:
+            tout = self.ARPES_data[Y_index, X_index, :, :]
+        # then check if check-box 'k-scale' is selected, convert angles to k
         if self.UI.checkBox_k.isChecked():
-            image_at_coord = self.ang_to_k(self.ARPES_data[Y_index, X_index, :, :], self.energy_scale, self.angle_scale)
-        else: 
-            image_at_coord = self.ARPES_data[Y_index, X_index, :, :]
+            image_at_coord = self.ang_to_k(tout, self.energy_scale, self.angle_scale)
+        else:
+            image_at_coord = tout
+
+            # print(tout2.shape)
+            # image_at_coord = self.ARPES_data[Y_index, X_index, :, :]
+            # print(image_at_coord.shape)
         
         return image_at_coord
         
@@ -234,11 +293,18 @@ class MainWindow(QMainWindow):
             if checkBox_k is checked, ROI is added in the k-scale
         :param angle_step: step in the angular scale (if 'k-selected', ROI is displaied in the k-scale)
         '''
+        # def add_custom_handle(roi, *args, **kwargs):
+        #     def addHandle(self, *args, **kwargs):
+        #         self.handleSize = 10
+        #         super(roi, self).addScaleHandle(*args, **kwargs)
+
+
 
         if self.UI.checkBox_k.isChecked():
             angle_step = self.convertAngletoK(angle_step,self.energy_scale[0])
         self.roi = pg.ROI([0, self.energy_offset + self.energy_step], 
-            [angle_step * self.ARPES_data.shape[2]/2, self.energy_step * self.ARPES_data.shape[3]/2])
+            [angle_step * self.ARPES_data.shape[2]/2, self.energy_step * self.ARPES_data.shape[3]/2],
+            pen=pg.mkPen(width=3), handlePen=pg.mkPen(width=3))
         self.roi.addScaleHandle([0.0, 0.0], [1, 1])
         
         # Signal is emitted any time when the position of ROI changes (ROI is dragged by the user)
@@ -254,13 +320,69 @@ class MainWindow(QMainWindow):
         :param pos_X: position along the X scale of spatial image
         :param pos_Y: position along the Y scale of spatial image
         '''
-        self.vLine = pg.InfiniteLine(pos=pos_X, angle=90, movable=True, bounds=[self.X_scale[0], self.X_scale[-1]])
-        self.hLine = pg.InfiniteLine(pos=pos_Y, angle=0, movable=True, bounds=[self.Y_scale[0], self.Y_scale[-1]])
+        pen = pg.mkPen(width=3, color='k')
+        self.vLine = pg.InfiniteLine(pos=pos_X, pen=pen, angle=90, movable=True, bounds=[self.X_scale[0], self.X_scale[-1]])
+        self.hLine = pg.InfiniteLine(pos=pos_Y, pen=pen, angle=0, movable=True, bounds=[self.Y_scale[0], self.Y_scale[-1]])
         self.plotSpatial.addItem(self.vLine, ignoreBounds=True)
         self.plotSpatial.addItem(self.hLine, ignoreBounds=True)
         self.vLine.sigPositionChanged.connect(self.update_ARPES_image) 
         self.hLine.sigPositionChanged.connect(self.update_ARPES_image)
+        self.vLine.sigPositionChanged.connect(self.update_integration_showbox) 
+        self.hLine.sigPositionChanged.connect(self.update_integration_showbox)
 
+        # Make box to show integration area
+        if not self.int_rect:
+            self.int_rect = pg.QtGui.QGraphicsRectItem(0, 0, 0, 0)
+            self.int_rect.setPen(pg.mkPen(color="r", width=2))
+            self.int_rect.setPos(self.xcenter_image, self.ycenter_image)
+        
+        # r2.setBrush(pg.mkBrush((50, 50, 200)))
+        self.plotSpatial.addItem(self.int_rect)
+    
+    def update_integration_showbox(self):
+        ''' Moves the integration box around the crosshair to
+            correct position
+        '''
+        X_coord = self.find_position(self.X_scale, self.vLine.getPos()[0]) 
+        Y_coord = self.find_position(self.Y_scale, self.hLine.getPos()[1]) 
+        xdim = self.UI.XSpinBox.value() 
+        ydim = self.UI.YSpinBox.value() 
+        
+        # self.int_rect.setPos(X_coord, Y_coord)
+        # self.int_rect.setRect(-xdim, -ydim, xdim, ydim)
+        # self.int_rect.setPos(0, 0)
+#        self.int_rect.setPos(X_coord-xdim/2-1, Y_coord-ydim/2-1)
+        self.int_rect.setPos(X_coord - xdim/2, Y_coord - ydim/2 )
+        # self.int_rect.setPos(120,140)
+    
+    def adjust_int_rectbox(self):
+        if not self.UI.IntegrateCheckBox.isChecked():
+            self.int_rect.hide()
+            return
+        else:
+            self.int_rect.show()
+            X_coord = self.find_position(self.X_scale, self.vLine.getPos()[0]) 
+            Y_coord = self.find_position(self.Y_scale, self.hLine.getPos()[1])
+            xdim = self.UI.XSpinBox.value() 
+            ydim = self.UI.YSpinBox.value()
+            int_x_size = xdim*self.pixelsize_x*2 
+            int_y_size = ydim*self.pixelsize_y*2 
+            self.int_rect.setRect(0, 0, int_x_size, int_y_size)
+            # self.int_rect.setPos(0, 0)
+            self.int_rect.setPos(X_coord - xdim/2, Y_coord - ydim/2 )
+        
+    def init_integrate_updates(self):
+        # Connect updating of plot
+        self.UI.IntegrateCheckBox.clicked.connect(self.update_ARPES_image)
+        self.UI.LockAutoRangeBox.clicked.connect(self.update_ARPES_image)
+        self.UI.XSpinBox.valueChanged.connect(self.update_ARPES_image)
+        self.UI.YSpinBox.valueChanged.connect(self.update_ARPES_image)
+        # Connect adjustement of integration rectangle
+        self.UI.IntegrateCheckBox.clicked.connect(self.adjust_int_rectbox)
+        self.UI.LockAutoRangeBox.clicked.connect(self.adjust_int_rectbox)
+        self.UI.XSpinBox.valueChanged.connect(self.adjust_int_rectbox)
+        self.UI.YSpinBox.valueChanged.connect(self.adjust_int_rectbox)
+        
     def init_graph_spatial(self): 
         ''' Initialize spatial image in the MainGraphView window.
         '''
@@ -270,13 +392,16 @@ class MainWindow(QMainWindow):
         self.plotSpatial = self.winI.addPlot(title="Spatial image")  # plot area (ViewBox + axes) for displaying the image
         self.imgSpatial = pg.ImageItem() # item for displaying image data: either a 2D numpy array or a 3D array
         self.plotSpatial.addItem(self.imgSpatial)
+        self.plotSpatial.setAspectLocked()
        
         # Add histrogramm
-        hist = pg.HistogramLUTItem()
+        hist = pg.HistogramLUTItem(orientation="horizontal")
+        hist.axis.setStyle(showValues=False)
+#        hist.axis.hideAxis("bottom")
         hist.setImageItem(self.imgSpatial)
-        hist.setMaximumWidth(150)
+#        hist.setMaximumWidth(150)
         hist.gradient.loadPreset('viridis')
-        self.winI.addItem(hist)
+        self.winI.addItem(hist, row=1, col=0)
 
     def init_graph_ARPES(self):
         ''' Initialize ARPES image in the MainGraphView_2 window.
@@ -289,12 +414,14 @@ class MainWindow(QMainWindow):
         self.plotARPES.addItem(self.imgARPES)   
         
         # Add histrogramm
-        hist = pg.HistogramLUTItem()
-        hist.setImageItem(self.imgARPES)
-        hist.setMaximumWidth(150)
-        hist.gradient.loadPreset('flame')
-        self.winA.addItem(hist) 
-
+        self.graph_hist = pg.HistogramLUTItem()
+        self.graph_hist.axis.setStyle(showValues=False)
+        self.graph_hist.setImageItem(self.imgARPES)
+        self.graph_hist.setMaximumWidth(150)
+        self.graph_hist.gradient.loadPreset('flame')
+        self.winA.addItem(self.graph_hist) 
+    
+    
     def update_roi(self):
         ''' Update angle and energy for the selected ROI (ROI is selected from the ARPES image)
         '''
@@ -386,6 +513,8 @@ class MainWindow(QMainWindow):
         width = np.around(X_scale[-1] - X_scale[0], - Decimal(str(X_scale[0])).as_tuple().exponent) + (X_scale[1]-X_scale[0])
         height = np.around(Y_scale[-1] - Y_scale[0], - Decimal(str(Y_scale[0])).as_tuple().exponent) + (Y_scale[1]-Y_scale[0])
         rect = QtCore.QRectF(left , bottom , width, height)
+        self.pixelsize_x = self.X_scale[1] - self.X_scale[0]
+        self.pixelsize_y = self.Y_scale[1] - self.Y_scale[0]
         return rect
 
     def find_position(self, array, value):
@@ -439,7 +568,7 @@ class MainWindow(QMainWindow):
         self.UI.Slider.setMaximum(int(round(maximum*10)))
         palette.setColor(palette.Background, QtGui.QColor(204, 255, 204))
         palette.setColor(palette.WindowText, QtGui.QColor(0,0,0))
-        self.UI.lcd.setSegmentStyle(QtGui.QLCDNumber.Flat)
+        self.UI.lcd.setSegmentStyle(QtWidgets.QLCDNumber.Flat)
         self.UI.lcd.setPalette(palette)
         self.UI.lcd.display(self.angle_0)
         # remove ZeroLine (which choses the zero angle) if it is already shown
@@ -508,10 +637,25 @@ class MainWindow(QMainWindow):
         const = 0.5124
         k = const*np.sqrt(Energy)*np.sin(np.pi/180*(ang))
         return k
+    
+    def closeEvent(self, ce):
+        """ Closes current event, ask for confirmation """
+        quit_msg = "Are you sure you want to exit?"
+        reply = QMessageBox.question(self, 'Message', 
+                         quit_msg, QMessageBox.Yes, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            ce.accept()
+        else:
+            ce.ignore()
+        self.settings.setValue("geometry", self.saveGeometry())
+        self.settings.setValue("windowState", self.saveState())
+
+        self.close()
 
 if __name__ == "__main__":
     qApp = QApplication(sys.argv)
-    qApp.setFont(QtGui.QFont('Helvetica', 12))
+    qApp.setFont(QtGui.QFont('Helvetica', 16))
     aw = MainWindow()
     aw.show()
     sys.exit(qApp.exec_())
