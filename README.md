@@ -10,4 +10,4 @@ Main features:
 - select the region of interest in real and momentum space and integrate the spatial map inside the selected region,
 - save images (cvg, jpg etc.) and data (ARPES or spatial) in 'csv' format. 
 
-![ARPES_GUI](https://user-images.githubusercontent.com/81705695/126094452-12a956d2-0092-45cc-85df-668e0079cfa3.png)
+![ARPES_GUI](https://user-images.githubusercontent.com/81705695/149383129-2ddd80c9-31a8-4cee-94b3-6241c02d6483.png)
