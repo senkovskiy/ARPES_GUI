@@ -13,11 +13,11 @@ Main features:
 ![ARPES_GUI](https://user-images.githubusercontent.com/81705695/149383129-2ddd80c9-31a8-4cee-94b3-6241c02d6483.png)
 
 Installation: 
-1. copy the folder 'src' 
-2. install the packages:
+1. the main files are in the folder 'src' 
+2. the packages to be installed:
      - pip install h5py 
      - pip install scipy 
      - pip install pyqtgraph 
      - pip install PyQt5 
-3. run the file 'ARPES_GUI_4.py'
+3. file to run is 'ARPES_GUI_4.py'
       
