@@ -10,6 +10,14 @@ Main features:
 - select the region of interest in real and momentum space and integrate the spatial map inside the selected region,
 - save images (cvg, jpg etc.) and data (ARPES or spatial) in 'csv' format. 
 
-Installation: pip install ARPES-GUI==0.0.4
-
 ![ARPES_GUI](https://user-images.githubusercontent.com/81705695/149383129-2ddd80c9-31a8-4cee-94b3-6241c02d6483.png)
+
+Installation: 
+1. copy the folder 'src' 
+2. install the packages:
+     - pip install h5py 
+     - pip install scipy 
+     - pip install pyqtgraph 
+     - pip install PyQt5 
+3. run the file 'ARPES_GUI_4.py'
+      
