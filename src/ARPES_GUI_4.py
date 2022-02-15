@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QSlider,
     QMessageBox,
-    )
+    )           
 
 from PyQt5.QtCore import (QDir)
 
@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
         try:
             self.f = h5py.File(self.path, "r")
         except:
-            QApplication.restoreOverrideCursor()
+            QApplication.restoreOverrideCursor()    
             print("No file chosen or could not load data")
             return
 

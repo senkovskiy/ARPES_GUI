@@ -1,0 +1,8 @@
+LICENSE.md
+README.md
+pyproject.toml
+setup.cfg
+src/ARPES_GUI.egg-info/PKG-INFO
+src/ARPES_GUI.egg-info/SOURCES.txt
+src/ARPES_GUI.egg-info/dependency_links.txt
+src/ARPES_GUI.egg-info/top_level.txt
