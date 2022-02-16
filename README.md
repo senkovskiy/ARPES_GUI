@@ -19,5 +19,5 @@ Installation:
      - pip install scipy 
      - pip install pyqtgraph 
      - pip install PyQt5 
-3. file to run: 'ARPES_GUI_4.py'
+3. file to run 'ARPES_GUI_4.py'
       
